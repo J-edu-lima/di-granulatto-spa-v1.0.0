@@ -1,4 +1,5 @@
 import { getProducts } from "@/modules/products/service";
+import { formatPrice } from "@/lib/utils/format";
 
 export default async function ProductsPage() {
   const products = await getProducts();
@@ -33,7 +34,7 @@ export default async function ProductsPage() {
             {products.map((product) => (
               <tr key={product.id}>
                 <td className="px-6 py-4">{product.name}</td>
-                <td className="px-6 py-4">{product.price}</td>
+                <td className="px-6 py-4">{formatPrice(product.price)}</td>
                 <td className="px-6 py-4">
                   {product.inStock ? "Em estoque" : "Sem estoque"}
                 </td>

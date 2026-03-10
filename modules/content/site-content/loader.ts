@@ -1,4 +1,4 @@
-import { getSiteContentByKey } from "./repository";
+import { getSiteContentByKey, getSiteContents } from "./repository";
 import { siteContentFallback } from "./fallback";
 
 export async function loadSiteContent(key: string): Promise<string> {
@@ -12,7 +12,6 @@ export async function loadSiteContent(key: string): Promise<string> {
 
 export async function loadAllSiteContent(): Promise<Record<string, string>> {
   try {
-    const { getSiteContents } = await import("./repository");
     const contents = await getSiteContents();
     return contents.reduce(
       (acc, item) => ({ ...acc, [item.key]: item.value }),
