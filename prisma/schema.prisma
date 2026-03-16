@@ -4,5 +4,134 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  
+}
+
+enum PaymentMethod {
+  pix
+  credit_card
+  debit_card
+  money
+}
+
+enum PaymentStatus {
+  paid
+  pending
+}
+
+enum OrderStatus {
+  created
+  confirmed
+  canceled
+}
+
+enum SiteSection {
+  about_values
+  about_mission
+  delivery_info
+  contact_info
+  about
+  about_main
+}
+
+model Category {
+  id        BigInt    @id @default(autoincrement()) @db.BigInt
+  name      String
+  slug      String    @unique
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  products  Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id               BigInt    @id @default(autoincrement()) @db.BigInt
+  name             String
+  slug             String    @unique
+  description      String?
+  shortDescription String?   @map("short_description")
+  price            Decimal   @db.Decimal(10, 2)
+  originalPrice    Decimal?  @map("original_price") @db.Decimal(10, 2)
+  categoryId       BigInt?   @map("category_id") @db.BigInt
+  imageUrl         String?   @map("image_url")
+  images           Json?     @db.JsonB
+  stockQuantity    Int       @default(0) @map("stock_quantity")
+  tags             String[]  @default([])
+  ingredients      String[]  @default([])
+  allergens        String[]  @default([])
+  servings         String?
+  isActive         Boolean   @default(true) @map("is_active")
+  isFeatured       Boolean   @default(false) @map("is_featured")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  category         Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  orderItems       OrderItem[]
+
+  @@index([categoryId], map: "idx_products_category")
+  @@index([isActive], map: "idx_products_active")
+  @@map("products")
+}
+
+model Order {
+  id              BigInt        @id @default(autoincrement()) @db.BigInt
+  orderNumber     String        @unique @map("order_number")
+  customerName    String        @map("customer_name")
+  customerPhone   String        @map("customer_phone")
+  customerAddress String?       @map("customer_address")
+  customerNotes   String?       @map("customer_notes")
+  status          OrderStatus   @default(created)
+  paymentMethod   PaymentMethod @map("payment_method")
+  paymentStatus   PaymentStatus @default(pending) @map("payment_status")
+  subtotal        Decimal       @db.Decimal(10, 2)
+  discount        Decimal       @default(0) @db.Decimal(10, 2)
+  total           Decimal       @db.Decimal(10, 2)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @default(now()) @map("updated_at") @db.Timestamptz(6)
+  orderItems      OrderItem[]
+
+  @@index([status], map: "idx_orders_status")
+  @@map("orders")
+}
+
+model OrderItem {
+  id           BigInt    @id @default(autoincrement()) @db.BigInt
+  orderId      BigInt?   @map("order_id") @db.BigInt
+  productId    BigInt?   @map("product_id") @db.BigInt
+  productName  String    @map("product_name")
+  productPrice Decimal   @map("product_price") @db.Decimal(10, 2)
+  quantity     Int
+  subtotal     Decimal   @db.Decimal(10, 2)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  order        Order?    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId], map: "idx_order_items_order")
+  @@map("order_items")
+}
+
+model Faq {
+  id        BigInt   @id @default(autoincrement()) @db.BigInt
+  question  String
+  answer    String
+  category  String?
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("faqs")
+}
+
+model SiteContent {
+  id        BigInt      @id @default(autoincrement()) @db.BigInt
+  section   SiteSection
+  title     String?
+  content   String?
+  imageUrl  String?     @map("image_url")
+  metadata  Json?       @db.JsonB
+  isActive  Boolean     @default(true) @map("is_active")
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime    @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("site_content")
 }

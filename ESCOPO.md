@@ -690,21 +690,21 @@ O sistema será considerado aceito quando atender às seguintes condições:
 ## Estrutura Analítica do Projeto (EAP / WBS)
 
 ### 1.1 Planejamento do Projeto
-- 1.1.1 Definição do escopo do sistema
-- 1.1.2 Levantamento dos requisitos funcionais
-- 1.1.3 Levantamento dos requisitos não funcionais
-- 1.1.4 Definição da arquitetura baseada em Next.js
+- 1.1.1 Definição do escopo do sistema ✔️
+- 1.1.2 Levantamento dos requisitos funcionais ✔️
+- 1.1.3 Levantamento dos requisitos não funcionais ✔️
+- 1.1.4 Definição da arquitetura baseada em Next.js ✔️
 
 ### 1.2 Configuração do Ambiente de Desenvolvimento
-- 1.2.1 Criação do repositório do projeto
-- 1.2.2 Configuração do ambiente Node.js
-- 1.2.3 Inicialização do projeto com Next.js
-- 1.2.4 Instalação das dependências principais
+- 1.2.1 Criação do repositório do projeto ✔️
+- 1.2.2 Configuração do ambiente Node.js ✔️
+- 1.2.3 Inicialização do projeto com Next.js ✔️
+- 1.2.4 Instalação das dependências principais ✔️
   - 1.2.4.1 Prisma
   - 1.2.4.2 Zod
   - 1.2.4.3 Cliente do banco de dados
-- 1.2.5 Configuração das variáveis de ambiente
-- 1.2.6 Configuração inicial do banco Supabase
+- 1.2.5 Configuração das variáveis de ambiente ✔️
+- 1.2.6 Configuração inicial do banco Supabase ✔️
 
 ### 1.3 Modelagem do Banco de Dados
 - 1.3.1 Definição das entidades do sistema
