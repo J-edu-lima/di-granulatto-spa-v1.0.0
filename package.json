@@ -1,35 +1,6 @@
 {
-  "name": "di-granulatto-spa-v1.0.0",
-  "version": "1.0.0",
-  "description": "O sistema consiste em uma aplicação full-stack construída com Next.js utilizando App Router e Prisma ORM para acesso ao banco de dados. O sistema tem como objetivo de catalogar os produtos (criando uma loja virtual para o vendedor)  e permitir a realização de pedidos (feitos por clientes) e controle dos pedidos (feitos pelo admin).",
-  "main": "index.js",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/J-edu-lima/di-granulatto-spa-v1.0.0.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/J-edu-lima/di-granulatto-spa-v1.0.0/issues"
-  },
-  "homepage": "https://github.com/J-edu-lima/di-granulatto-spa-v1.0.0#readme",
   "dependencies": {
-    "@prisma/client": "^7.5.0",
-    "@supabase/supabase-js": "^2.99.1",
-    "next": "^16.1.6",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "prisma": "^7.5.0"
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.99.2"
   }
 }
