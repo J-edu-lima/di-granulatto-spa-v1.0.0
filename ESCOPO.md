@@ -886,11 +886,11 @@ O sistema será considerado aceito quando atender às seguintes condições:
   - 1.2.4.2 Zod
   - 1.2.4.3 TailwindCSS
 - 1.2.5 Configuração das variáveis de ambiente ✔️
-- 1.2.6 Criação e configuração inicial do projeto Supabase ✔️
+- 1.2.6 Criação e configuração inicial do projeto Supabase 
 
 ### 1.3 Modelagem do Banco de Dados
 
-- 1.3.1 Definição das entidades do sistema ✔️
+- 1.3.1 Definição das entidades do sistema 
   - 1.3.1.1 Profiles
   - 1.3.1.2 Produtos
   - 1.3.1.3 Categorias
