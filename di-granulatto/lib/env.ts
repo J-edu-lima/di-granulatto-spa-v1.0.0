@@ -12,3 +12,4 @@ export const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL");
 export const supabasePublishableKey = getEnv(
   "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY",
 );
+export const supabaseServiceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");

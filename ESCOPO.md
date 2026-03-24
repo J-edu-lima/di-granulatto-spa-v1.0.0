@@ -59,17 +59,27 @@ Dados de perfil da aplicação → profiles
 
 ## Entidades Principais do Sistema
 
-O banco relacional possui as seguintes entidades principais:
+Esta seção representa o detalhamento da etapa **1.3.1 Definição das entidades do sistema**, com foco em entidade de negócio e sua representação no banco Supabase.
 
-- profiles
-- products
-- categories
-- orders
-- order_items
-- faqs
-- site_content
+Como o Supabase atua como BaaS, as entidades são modeladas no próprio banco (schema/tabelas/relacionamentos) e consumidas pela aplicação através do cliente Supabase e dos tipos TypeScript gerados.
 
-A entidade profiles representa os perfis de usuários da aplicação e estará associada diretamente ao sistema de autenticação do Supabase.
+| Entidade de Negócio | Objetivo no Sistema | Representação no Supabase | Campos e Regras Principais |
+| --- | --- | --- | --- |
+| Perfil de usuário administrativo | Identificar e autorizar o administrador do painel | `auth.users` + tabela pública `profiles` | `profiles.id` referencia `auth.users.id`; `profiles.role` define permissões de administração |
+| Categoria | Organizar produtos por grupos | tabela `categories` | `name`, `slug` único, auditoria (`created_at`, `updated_at`) |
+| Produto | Disponibilizar itens para venda no catálogo | tabela `products` | vínculo opcional com categoria (`category_id`), preço, estoque, flags (`is_active`, `is_featured`) |
+| Pedido | Registrar intenção de compra do cliente | tabela `orders` | identificação (`order_number`), dados do cliente, totais, status de pedido e pagamento |
+| Item do pedido | Registrar composição de cada pedido | tabela `order_items` | referência para `orders`, produto no momento da compra (`product_name`, `product_price`), `quantity > 0` |
+| Moderação de pedido | Permitir triagem anti-spam e decisão do ADM | representada em `orders` por status e metadados de análise | fluxo: em análise -> aceito, revisar (com mensagem e edição) ou cancelado |
+| FAQ | Disponibilizar perguntas e respostas públicas | tabela `faqs` | `question`, `answer`, ordenação e ativação (`sort_order`, `is_active`) |
+| Conteúdo institucional | Gerenciar textos e blocos editáveis do site | tabela `site_content` | conteúdo por seção (`section`), com controle de ativação e metadados |
+| Operação da loja | Controlar loja aberta/fechada no painel | tabela de configuração global (ex.: `store_settings`) | registro único com `is_open`, mensagem de indisponibilidade e `updated_at` |
+
+Diretriz de implementação para 1.3.1:
+
+- Entidade de negócio = regra e significado funcional no domínio.
+- Representação no banco = tabela, enum, relacionamento e restrições.
+- Representação na aplicação = tipos gerados do Supabase + validação de entrada com Zod.
 
 ---
 
@@ -87,9 +97,10 @@ A aplicação possui duas áreas principais:
 Área administrativa:
 
 - Gestão de produtos e categorias
-- Gestão de pedidos
+- Gestão de pedidos (incluindo fila de pedidos em análise)
 - Gestão de FAQ
 - Gestão de conteúdo institucional (Sobre nós e Contato)
+- Controle de operação da loja (aberta/fechada)
 - Dashboard administrativo
 
 ---
@@ -567,6 +578,21 @@ CREATE TYPE site_section AS ENUM (
   'about_main'
 );
 
+CREATE TYPE user_role AS ENUM (
+  'admin'
+);
+
+-- =========================================
+-- PROFILES
+-- =========================================
+
+CREATE TABLE profiles (
+  id         UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  role       user_role NOT NULL DEFAULT 'admin',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- =========================================
 -- CATEGORIES
 -- =========================================
@@ -673,14 +699,334 @@ CREATE TABLE site_content (
 );
 
 -- =========================================
+-- STORE SETTINGS
+-- =========================================
+
+CREATE TABLE store_settings (
+  id             SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  is_open        BOOLEAN NOT NULL DEFAULT true,
+  closed_message TEXT,
+  created_at     TIMESTAMPTZ DEFAULT now(),
+  updated_at     TIMESTAMPTZ DEFAULT now()
+);
+
+-- =========================================
 -- INDEXES
 -- =========================================
 
-CREATE INDEX idx_products_category  ON products(category_id);
-CREATE INDEX idx_products_active    ON products(is_active);
-CREATE INDEX idx_orders_status      ON orders(status);
-CREATE INDEX idx_order_items_order  ON order_items(order_id);
+-- Produtos: catálogo público e filtros do front
+CREATE INDEX idx_products_active_category ON products(is_active, category_id);
+CREATE INDEX idx_products_featured_active ON products(is_featured, is_active);
+CREATE INDEX idx_products_updated_at      ON products(updated_at DESC);
+
+-- Pedidos: fila de análise e histórico no painel ADM
+CREATE INDEX idx_orders_status_created_at         ON orders(status, created_at DESC);
+CREATE INDEX idx_orders_payment_status_created_at ON orders(payment_status, created_at DESC);
+
+-- Itens de pedido: carregamento de itens por pedido
+CREATE INDEX idx_order_items_order_created_at ON order_items(order_id, created_at);
+
+-- FAQ: renderização pública ordenada
+CREATE INDEX idx_faqs_active_sort_order ON faqs(is_active, sort_order);
+
+-- Conteúdo dinâmico: carregamento por seção ativa
+CREATE INDEX idx_site_content_section_active ON site_content(section, is_active);
+
+-- Profiles: busca rápida de administradores
+CREATE INDEX idx_profiles_role ON profiles(role);
 ```
+
+### Políticas de Segurança (RLS)
+
+```sql
+-- =====================================================
+-- RLS COMPLETO - DI GRANULATTO
+-- =====================================================
+
+-- -----------------------------------------------------
+-- 0) Funções auxiliares
+-- -----------------------------------------------------
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'admin'::public.user_role
+  );
+$$;
+
+create or replace function public.can_attach_item_to_order(p_order_id bigint)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (
+    select 1
+    from public.orders o
+    where o.id = p_order_id
+      and o.status = 'created'::public.order_status
+  );
+$$;
+
+create or replace function public.is_store_open()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select coalesce(
+    (select s.is_open from public.store_settings s where s.id = 1),
+    true
+  );
+$$;
+
+-- -----------------------------------------------------
+-- 1) Habilitar RLS
+-- -----------------------------------------------------
+
+alter table if exists public.profiles enable row level security;
+alter table if exists public.categories enable row level security;
+alter table if exists public.products enable row level security;
+alter table if exists public.faqs enable row level security;
+alter table if exists public.site_content enable row level security;
+alter table if exists public.orders enable row level security;
+alter table if exists public.order_items enable row level security;
+alter table if exists public.store_settings enable row level security;
+
+alter table if exists public.profiles force row level security;
+alter table if exists public.categories force row level security;
+alter table if exists public.products force row level security;
+alter table if exists public.faqs force row level security;
+alter table if exists public.site_content force row level security;
+alter table if exists public.orders force row level security;
+alter table if exists public.order_items force row level security;
+alter table if exists public.store_settings force row level security;
+
+-- -----------------------------------------------------
+-- 2) Limpeza de policies (idempotente)
+-- -----------------------------------------------------
+
+drop policy if exists profiles_select_own on public.profiles;
+drop policy if exists profiles_admin_all on public.profiles;
+
+drop policy if exists categories_public_read on public.categories;
+drop policy if exists categories_admin_all on public.categories;
+
+drop policy if exists products_public_read_active on public.products;
+drop policy if exists products_admin_all on public.products;
+
+drop policy if exists faqs_public_read_active on public.faqs;
+drop policy if exists faqs_admin_all on public.faqs;
+
+drop policy if exists site_content_public_read_active on public.site_content;
+drop policy if exists site_content_admin_all on public.site_content;
+
+drop policy if exists store_settings_public_read on public.store_settings;
+drop policy if exists store_settings_admin_all on public.store_settings;
+
+drop policy if exists orders_public_insert on public.orders;
+drop policy if exists orders_admin_select on public.orders;
+drop policy if exists orders_admin_update on public.orders;
+drop policy if exists orders_admin_delete on public.orders;
+
+drop policy if exists order_items_public_insert on public.order_items;
+drop policy if exists order_items_admin_select on public.order_items;
+drop policy if exists order_items_admin_update on public.order_items;
+drop policy if exists order_items_admin_delete on public.order_items;
+
+-- -----------------------------------------------------
+-- 3) Profiles
+-- -----------------------------------------------------
+
+create policy profiles_select_own
+on public.profiles
+for select
+to authenticated
+using (id = auth.uid());
+
+create policy profiles_admin_all
+on public.profiles
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+-- -----------------------------------------------------
+-- 4) Leitura pública de catálogo e conteúdo
+-- -----------------------------------------------------
+
+create policy categories_public_read
+on public.categories
+for select
+to anon, authenticated
+using (true);
+
+create policy categories_admin_all
+on public.categories
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy products_public_read_active
+on public.products
+for select
+to anon, authenticated
+using (is_active = true);
+
+create policy products_admin_all
+on public.products
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy faqs_public_read_active
+on public.faqs
+for select
+to anon, authenticated
+using (is_active = true);
+
+create policy faqs_admin_all
+on public.faqs
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy site_content_public_read_active
+on public.site_content
+for select
+to anon, authenticated
+using (is_active = true);
+
+create policy site_content_admin_all
+on public.site_content
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy store_settings_public_read
+on public.store_settings
+for select
+to anon, authenticated
+using (true);
+
+create policy store_settings_admin_all
+on public.store_settings
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+-- -----------------------------------------------------
+-- 5) Orders (cliente cria, não lê)
+-- -----------------------------------------------------
+
+create policy orders_public_insert
+on public.orders
+for insert
+to anon, authenticated
+with check (
+  status = 'created'::public.order_status
+  and payment_status = 'pending'::public.payment_status
+  and public.is_store_open()
+);
+
+create policy orders_admin_select
+on public.orders
+for select
+to authenticated
+using (public.is_admin());
+
+create policy orders_admin_update
+on public.orders
+for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy orders_admin_delete
+on public.orders
+for delete
+to authenticated
+using (public.is_admin());
+
+-- -----------------------------------------------------
+-- 6) Order items (cliente insere, não lê)
+-- -----------------------------------------------------
+
+create policy order_items_public_insert
+on public.order_items
+for insert
+to anon, authenticated
+with check (public.can_attach_item_to_order(order_id));
+
+create policy order_items_admin_select
+on public.order_items
+for select
+to authenticated
+using (public.is_admin());
+
+create policy order_items_admin_update
+on public.order_items
+for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy order_items_admin_delete
+on public.order_items
+for delete
+to authenticated
+using (public.is_admin());
+
+-- -----------------------------------------------------
+-- 7) Grants de reforço
+-- -----------------------------------------------------
+
+revoke select on public.orders from anon, authenticated;
+revoke select on public.order_items from anon, authenticated;
+
+revoke update, delete on public.orders from anon, authenticated;
+revoke update, delete on public.order_items from anon, authenticated;
+
+grant insert on public.orders to anon, authenticated;
+grant insert on public.order_items to anon, authenticated;
+```
+
+### Roteiro de Validação RLS (Resumo)
+
+1. Testar como `anon`:
+  - Deve conseguir `SELECT` em `products` ativos, `faqs` ativos, `site_content` ativo e `store_settings`.
+  - Deve conseguir `INSERT` em `orders` com status inicial e pagamento pendente.
+  - Não deve conseguir `SELECT` em `orders` e `order_items`.
+
+2. Testar como `authenticated` não-admin:
+  - Deve manter o mesmo comportamento público de leitura do catálogo/conteúdo.
+  - Não deve conseguir visualizar, atualizar ou remover `orders` e `order_items`.
+
+3. Testar como `authenticated` admin:
+  - Deve conseguir `SELECT`, `UPDATE` e `DELETE` em `orders` e `order_items`.
+  - Deve conseguir gerenciar produtos, categorias, FAQ, conteúdo e `store_settings`.
+
+4. Testar loja fechada:
+  - Com `store_settings.is_open = false`, `INSERT` público em `orders` deve falhar.
+
+5. Validar fluxo de negócio:
+  - Cliente cria pedido, mas não consulta pedido no sistema.
+  - Confirmação de pedido ocorre externamente (WhatsApp) após análise do administrador.
 
 ---
 
@@ -705,6 +1051,9 @@ CREATE INDEX idx_order_items_order  ON order_items(order_id);
 | RF13 | Visualizar pedidos               | O administrador pode visualizar os pedidos realizados pelos clientes.                                                       |
 | RF14 | Gerenciar estado do pedido       | O administrador pode alterar o status: Confirmado, Preparando, Cancelado.                                                   |
 | RF15 | Gerenciar estado de pagamento    | O administrador pode visualizar e alterar o status de pagamento: Pago, Pendente.                                            |
+| RF16 | Caixa de pedidos em análise      | Todo novo pedido deve entrar automaticamente em uma fila/caixa de pedidos em análise antes da confirmação.                  |
+| RF17 | Aprovar, revisar ou cancelar pedido | O administrador pode aceitar o pedido, cancelar o pedido ou solicitar revisão com mensagem ao cliente e edição do pedido antes da confirmação efetiva. |
+| RF18 | Controle de operação da loja     | O administrador pode abrir ou fechar a loja por meio de um botão no painel administrativo.                                  |
 
 ### Requisitos Não Funcionais
 
@@ -750,6 +1099,8 @@ CREATE INDEX idx_order_items_order  ON order_items(order_id);
 | UC08 | Gerenciar conteúdo do site     | O administrador atualiza páginas institucionais e informações exibidas no site. |
 | UC09 | Gerenciar pedidos              | O administrador visualiza pedidos e altera seu estado.                          |
 | UC10 | Gerenciar pagamento            | O administrador visualiza e altera o estado de pagamento dos pedidos.           |
+| UC11 | Moderação de pedidos           | O administrador analisa pedidos na caixa de análise e decide por aceitar, revisar com mensagem ou cancelar.                |
+| UC12 | Controlar status da loja       | O administrador alterna o funcionamento da loja entre aberta e fechada.         |
 
 ---
 
@@ -843,6 +1194,18 @@ O sistema será considerado aceito quando atender às seguintes condições:
 
 - As principais funcionalidades devem ser testadas antes da entrega, incluindo: criação de produtos, edição de produtos, criação de pedidos e visualização de pedidos.
 
+**7. Moderação e antispam de pedidos**
+
+- Todo pedido novo deve entrar no estado de análise antes de qualquer confirmação definitiva.
+- O administrador deve conseguir aprovar o pedido diretamente quando viável.
+- O administrador deve conseguir enviar mensagem ao cliente e revisar/editar o pedido antes da confirmação efetiva.
+- O administrador deve conseguir cancelar pedidos mal intencionados ou inviáveis.
+
+**8. Controle de funcionamento da loja**
+
+- O administrador deve conseguir alternar o status da loja entre aberta e fechada no painel.
+- Com a loja fechada, novos pedidos não devem ser confirmados pelo fluxo padrão da loja.
+
 ---
 
 ## Restrições e Premissas
@@ -882,15 +1245,15 @@ O sistema será considerado aceito quando atender às seguintes condições:
 - 1.2.2 Configuração do ambiente Node.js ✔️
 - 1.2.3 Inicialização do projeto com Next.js ✔️
 - 1.2.4 Instalação das dependências principais ✔️
-  - 1.2.4.1 Supabase Client
-  - 1.2.4.2 Zod
-  - 1.2.4.3 TailwindCSS
+  - 1.2.4.1 Supabase Client ✔️
+  - 1.2.4.2 Zod ✔️
+  - 1.2.4.3 TailwindCSS ✔️
 - 1.2.5 Configuração das variáveis de ambiente ✔️
-- 1.2.6 Criação e configuração inicial do projeto Supabase 
+- 1.2.6 Criação e configuração inicial do projeto Supabase ✔️
 
 ### 1.3 Modelagem do Banco de Dados
 
-- 1.3.1 Definição das entidades do sistema 
+- 1.3.1 Definição das entidades do sistema ✔️
   - 1.3.1.1 Profiles
   - 1.3.1.2 Produtos
   - 1.3.1.3 Categorias
@@ -898,16 +1261,26 @@ O sistema será considerado aceito quando atender às seguintes condições:
   - 1.3.1.5 Itens do pedido
   - 1.3.1.6 FAQ
   - 1.3.1.7 Conteúdo do site
-- 1.3.2 Implementação da modelagem no banco PostgreSQL
-  - 1.3.2.1 Criação das tabelas
-  - 1.3.2.2 Definição de relacionamentos
-  - 1.3.2.3 Criação de índices
-- 1.3.3 Configuração de segurança no banco
-  - 1.3.3.1 Ativação de Row Level Security (RLS)
-  - 1.3.3.2 Criação de políticas de acesso
-- 1.3.4 Geração de tipos TypeScript a partir do banco
-  - 1.3.4.1 Configuração da CLI do Supabase
-  - 1.3.4.2 Geração do arquivo types/database.ts
+- 1.3.2 Implementação da modelagem no banco PostgreSQL  ✔️
+  - 1.3.2.1 Criação das tabelas ✔️
+  - 1.3.2.2 Definição de relacionamentos ✔️
+  - 1.3.2.3 Criação de índices ✔️
+    - 1.3.2.3.1 Índices de listagem pública de produtos ✔️
+    - 1.3.2.3.2 Índices de moderação e histórico de pedidos no painel ✔️
+    - 1.3.2.3.3 Índices de carregamento de itens por pedido ✔️
+    - 1.3.2.3.4 Índices de FAQ por ativação e ordenação ✔️
+    - 1.3.2.3.5 Índices de conteúdo institucional por seção ativa ✔️
+- 1.3.3 Configuração de segurança no banco ✔️
+  - 1.3.3.1 Ativação de Row Level Security (RLS) ✔️
+  - 1.3.3.2 Criação de políticas de acesso ✔️
+    - Nota: 22 políticas definidas em ESCOPO.md, prontas para deploy no Supabase
+    - Ver `RLS_VALIDATION_GUIDE.md` para instruções de validação
+- 1.3.4 Geração de tipos TypeScript a partir do banco ✔️
+  - 1.3.4.1 Configuração da CLI do Supabase ✔️
+  - 1.3.4.2 Geração do arquivo types/database.ts ✔️
+    - Arquivo: `/types/database.ts` (493 linhas)
+    - Contém tipos para: `categories`, `faqs`, `order_items`, `orders`, `products`, `profiles`, `site_content`, `store_settings`
+    - Inclui tipos para funções RLS: `is_admin()`, `can_attach_item_to_order()`, `is_store_open()`
 
 ### 1.4 Desenvolvimento da Interface do Usuário
 
@@ -929,6 +1302,27 @@ O sistema será considerado aceito quando atender às seguintes condições:
   - 1.4.5.1 Exibição das perguntas e respostas
 - 1.4.6 Página de Contato
   - 1.4.6.1 Exibição das informações de contato
+- 1.4.7 Página Sobre Nós
+  - 1.4.7.1 Página pública dedicada com conteúdo institucional
+  - 1.4.7.2 Seção editável pelo administrador
+  - 1.4.7.3 Exibição de valores e história da marca
+- 1.4.8 Formulário de Checkout
+  - 1.4.8.1 Coleta de dados do cliente (nome, contato WhatsApp)
+  - 1.4.8.2 Revisão de itens do carrinho antes de confirmar
+  - 1.4.8.3 Cálculo automático do valor total
+  - 1.4.8.4 Validação de dados obrigatórios
+  - 1.4.8.5 Integração com fluxo de pedidos do sistema
+- 1.4.9 Tela de Confirmação de Pedido
+  - 1.4.9.1 Exibição do resumo do pedido enviado
+  - 1.4.9.2 Número/ID único do pedido
+  - 1.4.9.3 Mensagem de sucesso ao cliente
+  - 1.4.9.4 Instruções de próximas etapas (consultar no WhatsApp)
+  - 1.4.9.5 Opção de voltar ao catálogo
+- 1.4.10 Status/Indicador de Loja Fechada
+  - 1.4.10.1 Exibição de overlay ou banner quando loja está fechada
+  - 1.4.10.2 Mensagem customizável (via `store_settings.closed_message`)
+  - 1.4.10.3 Bloqueio visual do formulário de checkout
+  - 1.4.10.4 Indicador de horário de funcionamento na navegação
 
 ### 1.5 Desenvolvimento da Área Administrativa
 
@@ -973,26 +1367,39 @@ O sistema será considerado aceito quando atender às seguintes condições:
 - 1.7.2 Registro de itens do pedido
 - 1.7.3 Armazenamento do pedido no banco
 - 1.7.4 Consulta de pedidos no painel administrativo
+- 1.7.5 Caixa de pedidos em análise
+  - 1.7.5.1 Entrada automática de novos pedidos para análise
+  - 1.7.5.2 Ação de aceite de pedido
+  - 1.7.5.3 Ação de revisão de pedido com mensagem ao cliente
+  - 1.7.5.4 Edição do pedido durante revisão
+  - 1.7.5.5 Ação de cancelamento de pedido
 
-### 1.8 Implementação de Autenticação
+### 1.8 Implementação do Controle de Operação da Loja
 
-- 1.8.1 Configuração do Supabase Auth
-- 1.8.2 Criação do usuário administrador
-- 1.8.3 Integração do login com Next.js
-- 1.8.4 Proteção da área administrativa
+- 1.8.1 Criação do status global da loja (aberta/fechada)
+- 1.8.2 Botão de abrir/fechar loja no painel administrativo
+- 1.8.3 Bloqueio de novos pedidos enquanto a loja estiver fechada
+- 1.8.4 Exibição de mensagem de loja fechada na área pública
 
-### 1.9 Testes do Sistema
+### 1.9 Implementação de Autenticação
 
-- 1.9.1 Testes de interface do usuário
-- 1.9.2 Testes de funcionamento do carrinho
-- 1.9.3 Testes de cadastro e edição de produtos
-- 1.9.4 Testes de criação de pedidos
-- 1.9.5 Testes de integração com banco de dados
+- 1.9.1 Configuração do Supabase Auth
+- 1.9.2 Criação do usuário administrador
+- 1.9.3 Integração do login com Next.js
+- 1.9.4 Proteção da área administrativa
 
-### 1.10 Infraestrutura e Deploy
+### 1.10 Testes do Sistema
 
-- 1.10.1 Configuração do banco Supabase em produção
-- 1.10.2 Configuração das variáveis de ambiente
-- 1.10.3 Build da aplicação Next.js
-- 1.10.4 Deploy da aplicação
-- 1.10.5 Testes de funcionamento após deploy
+- 1.10.1 Testes de interface do usuário
+- 1.10.2 Testes de funcionamento do carrinho
+- 1.10.3 Testes de cadastro e edição de produtos
+- 1.10.4 Testes de criação de pedidos
+- 1.10.5 Testes de integração com banco de dados
+
+### 1.11 Infraestrutura e Deploy
+
+- 1.11.1 Configuração do banco Supabase em produção
+- 1.11.2 Configuração das variáveis de ambiente
+- 1.11.3 Build da aplicação Next.js
+- 1.11.4 Deploy da aplicação
+- 1.11.5 Testes de funcionamento após deploy
