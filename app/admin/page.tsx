@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Package, ShoppingBag, TrendingUp, Tag, RefreshCw } from "lucide-react"
 import { AdminLayout } from "@/components/admin/admin-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,7 +25,13 @@ const PAYMENT_LABELS: Record<string, string> = {
 }
 
 export default function AdminDashboard() {
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+  const [lastUpdated, setLastUpdated] = useState<Date>(() => new Date())
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+    setLastUpdated(new Date())
+  }, [])
 
   // Mock stats
   const stats = {
@@ -90,6 +96,8 @@ export default function AdminDashboard() {
             </Button>
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               Atualizado às {lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              Atualizado às {lastUpdated?.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) || "—"}
+              Atualizado às {isClient ? lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
             </span>
           </div>
         </div>

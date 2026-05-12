@@ -14,6 +14,7 @@ import {
   Store,
   HelpCircle,
   FolderOpen,
+  Mail,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -24,6 +25,7 @@ const navigation = [
   { name: "Produtos", href: "/admin/produtos", icon: Package },
   { name: "Categorias", href: "/admin/categorias", icon: FolderOpen },
   { name: "Sobre Nós", href: "/admin/sobre", icon: FileText },
+  { name: "Contato", href: "/admin/contato", icon: Mail },
   { name: "FAQ", href: "/admin/faq", icon: HelpCircle },
   { name: "Pedidos", href: "/admin/pedidos", icon: ClipboardList },
 ]
