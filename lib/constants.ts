@@ -223,6 +223,8 @@ export const MOCK_FAQ: FAQItem[] = [
   },
 ]
 
+const MOCK_REFERENCE_DATE = new Date("2026-06-01T12:00:00.000Z")
+
 // Mock Orders for Admin
 export const MOCK_ORDERS = [
   {
@@ -239,7 +241,7 @@ export const MOCK_ORDERS = [
     delivery_fee: 10,
     total: 99.90,
     customer_notes: "Entregar após às 14h",
-    created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 min atrás
+    created_at: new Date(MOCK_REFERENCE_DATE.getTime() - 1000 * 60 * 30).toISOString(), // 30 min atrás
   },
   {
     id: "order-2",
@@ -255,7 +257,7 @@ export const MOCK_ORDERS = [
     delivery_fee: 0,
     total: 150.00,
     customer_notes: "",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 horas atrás
+    created_at: new Date(MOCK_REFERENCE_DATE.getTime() - 1000 * 60 * 60 * 2).toISOString(), // 2 horas atrás
   },
   {
     id: "order-3",
@@ -271,7 +273,7 @@ export const MOCK_ORDERS = [
     delivery_fee: 15,
     total: 225.00,
     customer_notes: "Bolo é para aniversário",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), // 5 horas atrás
+    created_at: new Date(MOCK_REFERENCE_DATE.getTime() - 1000 * 60 * 60 * 5).toISOString(), // 5 horas atrás
   },
   {
     id: "order-4",
@@ -287,7 +289,7 @@ export const MOCK_ORDERS = [
     delivery_fee: 10,
     total: 85.00,
     customer_notes: "",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 dia atrás
+    created_at: new Date(MOCK_REFERENCE_DATE.getTime() - 1000 * 60 * 60 * 24).toISOString(), // 1 dia atrás
   },
   {
     id: "order-5",
@@ -303,7 +305,7 @@ export const MOCK_ORDERS = [
     delivery_fee: 0,
     total: 110.00,
     customer_notes: "Retirar na loja",
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(), // 3 horas atrás
+    created_at: new Date(MOCK_REFERENCE_DATE.getTime() - 1000 * 60 * 60 * 3).toISOString(), // 3 horas atrás
   },
 ]
 

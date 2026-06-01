@@ -24,8 +24,21 @@ const PAYMENT_LABELS: Record<string, string> = {
   card: "Cartão",
 }
 
+const ADMIN_TIME_ZONE = "America/Sao_Paulo"
+
+function formatAdminOrderDate(dateString: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: ADMIN_TIME_ZONE,
+  }).format(new Date(dateString))
+}
+
 export default function AdminDashboard() {
-  const [lastUpdated, setLastUpdated] = useState<Date>(() => new Date())
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
@@ -95,9 +108,7 @@ export default function AdminDashboard() {
               Atualizar
             </Button>
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              Atualizado às {lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-              Atualizado às {lastUpdated?.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) || "—"}
-              Atualizado às {isClient ? lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
+              Atualizado às {isClient && lastUpdated ? lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
             </span>
           </div>
         </div>
@@ -184,12 +195,7 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td className="py-3 text-xs text-muted-foreground">
-                            {new Date(order.created_at).toLocaleString("pt-BR", {
-                              day:    "2-digit",
-                              month:  "2-digit",
-                              hour:   "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {formatAdminOrderDate(order.created_at)}
                           </td>
                         </tr>
                       )
